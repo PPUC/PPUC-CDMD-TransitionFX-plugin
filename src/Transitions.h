@@ -71,6 +71,10 @@ struct SourceInfo
    // Any of them may be empty (nothing is known: the shades are the colors, nothing is the same).
    std::vector<uint16_t> tones, tonesSecond;
    std::vector<uint8_t> same;
+   // Alternating Slide: how many rows (or columns) make one bar, and whether the first bar slides
+   // right/down instead of left/up.
+   uint32_t barSize = 1;
+   bool firstReversed = false;
    uint32_t crossSpan = 0;        // toFrame: the largest color difference between the two frames, in
                                   // units of a 5-bit channel (what a cross-fade needs to know)
 };
@@ -687,13 +691,16 @@ private:
 };
 
 // Alternating Slide: every other line slides one way, the lines between slide the other way.
-// Horizontal: the 1st, 3rd, 5th ... row slide left and the 2nd, 4th ... row slide right.
-// Vertical: the 1st, 3rd ... column go up and the 2nd, 4th ... column go down.
+// Horizontal: the 1st, 3rd, 5th ... bar of rows slides left and the 2nd, 4th ... bar right.
+// Vertical: the 1st, 3rd ... bar of columns goes up and the 2nd, 4th ... bar goes down.
+// A bar is `bar` rows (or columns) wide; `reversed` swaps the two directions.
 class AlternatingSlide final : public Effect
 {
 public:
-   AlternatingSlide(bool rows, uint32_t width, uint32_t height, bool follow = false)
-      : m_rows(rows), m_width(width), m_height(height), m_follow(follow)
+   AlternatingSlide(bool rows, uint32_t width, uint32_t height, bool follow = false, uint32_t bar = 1,
+                    bool reversed = false)
+      : m_rows(rows), m_width(width), m_height(height), m_follow(follow), m_bar(std::max(1u, bar)),
+        m_reversed(reversed)
    {
    }
    uint32_t maxSteps() const override { return std::min(kMaxSteps, travelOf(extent())); }
@@ -702,7 +709,7 @@ public:
    {
       const uint32_t offset = offsetAt(extent(), step, steps);
       // Counted as people count: the first row (y = 0) is an odd one.
-      const bool odd = ((m_rows ? y : x) % 2u) == 0u;
+      const bool odd = (((m_rows ? y : x) / m_bar) % 2u == 0u) != m_reversed;
       const Direction d = m_rows ? (odd ? Direction::Left : Direction::Right)
                                  : (odd ? Direction::Up : Direction::Down);
       return movedPixel(d, x, y, offset, m_width, m_height, m_follow);
@@ -713,6 +720,8 @@ private:
    bool m_rows;
    uint32_t m_width, m_height;
    bool m_follow;
+   uint32_t m_bar;
+   bool m_reversed;
 };
 
 // Split: the picture is cut in the middle; the two halves move apart (vertical: a vertical cut,
@@ -1598,7 +1607,8 @@ inline std::unique_ptr<Effect> makeFade(const char*, const SourceInfo& s)
 }
 inline std::unique_ptr<Effect> makeAlternatingSlide(const char* option, const SourceInfo& s)
 {
-   return std::make_unique<AlternatingSlide>(!same(option, "vertical"), s.width, s.height, follows(s));
+   return std::make_unique<AlternatingSlide>(!same(option, "vertical"), s.width, s.height, follows(s), s.barSize,
+                                             s.firstReversed);
 }
 // Split: Vertical cuts down the middle (the halves move left and right), Horizontal cuts across
 // the middle (the halves move up and down).
@@ -1664,8 +1674,8 @@ inline const Option kWipeOptions[] = {
 
 inline const Transition kTransitions[] = {
    {"alternating_slide", "Alternating Slide",
-    "Horizontal: even rows (0,2,4) slide left and odd rows (1,3,5) slide right\n"
-    "Vertical: even columns (0,2,4) slide up and odd columns (1,3,5) slide down",
+    "Bars of rows (Horizontal) or columns (Vertical) slide in alternate directions: the first bar one way, "
+    "the next one the other way.",
     "Orientation", kOrientationOptions, TB_COUNT(kOrientationOptions), &makeAlternatingSlide, true},
    {"blinds", "Blinds",
     "Bars appear at regular intervals and grow wider.\n"

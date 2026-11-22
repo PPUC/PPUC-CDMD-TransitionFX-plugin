@@ -1194,6 +1194,22 @@ void testMovingSpecifics()
                CHECK((x % 2 == 0) ? vt.y > y : vt.y < y);
             }
          }
+   // Bars of 8: the first 8 columns go down and the next 8 up when the first bar is reversed.
+   for (uint32_t step = 1; step <= 6; ++step)
+      for (uint32_t x = 0; x < w; ++x)
+         for (uint32_t y = 0; y < h; ++y)
+            for (int reversed = 0; reversed < 2; ++reversed)
+            {
+               transitions::SourceInfo info = makeInfo(w, h);
+               info.barSize = 8;
+               info.firstReversed = reversed == 1;
+               auto r = transitions::findTransition("alternating_slide")->make("vertical", info)->rule(x, y, step, 6);
+               if (!r.visible)
+                  continue;
+               CHECK(r.x == x);
+               const bool up = ((x / 8) % 2 == 0) != (reversed == 1);
+               CHECK(up ? r.y > y : r.y < y);
+            }
    // Split: the left half moves left, the right half moves right, rows stay.
    for (uint32_t y = 0; y < h; ++y)
       for (uint32_t x = 0; x < w; ++x)
@@ -1439,16 +1455,27 @@ void testTheWindow()
    const Form::Field* source = fieldOf("source");
    CHECK(source && source->kind == CDMDPI_FIELD_NOTE && source->label.find("frame 0") != std::string::npos);
 
+   // Alternating Slide: bar width and the first bar's direction follow the orientation.
+   change("transition", "fade");
+   CHECK(fieldOf("bar_size") && !fieldOf("bar_size")->visible && fieldOf("first_slide") && !fieldOf("first_slide")->visible);
+   change("transition", "alternating_slide");
+   change("option", "vertical");
+   CHECK(fieldOf("bar_size")->visible && fieldOf("first_slide")->visible);
+   CHECK(fieldOf("first_slide")->label == "First column slides");
+   CHECK((choiceValues(*fieldOf("first_slide")) == std::vector<std::string>{"a", "b"}));
+   CHECK(choiceValues(*fieldOf("bar_size")).size() == 32);
+   change("option", "horizontal");
+   CHECK(fieldOf("first_slide")->label == "First row slides" && choiceValues(*fieldOf("bar_size")).size() == 16);
+   change("transition", "fade");
+   CHECK(!fieldOf("bar_size")->visible);
+
    // The option follows the transition: its label, its list, its help.
    change("transition", "dissolve");
    const Form::Field* o = fieldOf("option");
    CHECK(o && o->kind == CDMDPI_FIELD_RADIO && o->visible);
-   // The blank line between the transition and its option shows with the option, not without.
-   CHECK(fieldOf("gap") && fieldOf("gap")->kind == CDMDPI_FIELD_NOTE && fieldOf("gap")->visible);
    change("transition", "fade");
-   CHECK(fieldOf("option") && !fieldOf("option")->visible && fieldOf("gap") && !fieldOf("gap")->visible);
+   CHECK(fieldOf("option") && !fieldOf("option")->visible);
    change("transition", "dissolve");
-   CHECK(fieldOf("gap") && fieldOf("gap")->visible);
    if (o)
    {
       const std::vector<std::string> want = {"orderly", "random", "wpc"};
@@ -2401,8 +2428,8 @@ void testVersionAndDescriptions()
       CHECK(d.find("left at the end") == std::string::npos && d.find("thin ") == std::string::npos);
    }
    CHECK(std::string(transitions::findTransition("alternating_slide")->description) ==
-         "Horizontal: even rows (0,2,4) slide left and odd rows (1,3,5) slide right\n"
-         "Vertical: even columns (0,2,4) slide up and odd columns (1,3,5) slide down");
+         "Bars of rows (Horizontal) or columns (Vertical) slide in alternate directions: the first bar one way, "
+         "the next one the other way.");
    CHECK(std::string(transitions::findTransition("fade")->description) ==
          "The first frame gradually fades to black, white or the second frame.");
    closeForm(false);

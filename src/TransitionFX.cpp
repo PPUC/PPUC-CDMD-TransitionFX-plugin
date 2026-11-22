@@ -60,8 +60,8 @@ constexpr const char* kFieldFrames = "frames";
 // A note that draws a thin line between the groups of fields (a note starting with a tag is HTML).
 constexpr const char* kSeparator = "<hr>";
 // A blank line between the transition and its option; shown with the option only.
-constexpr const char* kFieldGap = "gap";
-constexpr const char* kGap = "<span>&nbsp;</span>";
+constexpr const char* kFieldBarSize = "bar_size";   // Alternating Slide: rows or columns per bar
+constexpr const char* kFieldFirstSlide = "first_slide"; // Alternating Slide: "a" left/up, "b" right/down
 constexpr const char* kFieldPlacement = "placement"; // "after", "end" or "scene"
 constexpr const char* kFieldDuration = "duration";   // the scene's frame duration
 constexpr const char* kFieldInclude = "include"; // "none", "start", "end" or "both": extra frames of the scene
@@ -134,6 +134,9 @@ struct Window
    // The other frame comes in with the effect, in its pattern, instead of staying in place (only
    // for the transitions that can do that).
    bool secondMoves = false;
+   // Alternating Slide: rows or columns per bar, and whether the first bar slides right/down.
+   uint32_t barSize = 1;
+   bool firstReversed = false;
    // The number of frames the author asked for: the list shows it whenever the transition can
    // make that many, and the most it can make otherwise.
    std::string framesWanted;
@@ -907,6 +910,8 @@ void makeEffect()
       transitions::SourceInfo info =
          sourceInfoOf(g_window.source, g_window.toWhite, g_window.toFrame ? &g_window.second : nullptr);
       info.secondMoves = g_window.secondMoves && g_window.transition->canMoveSecond;
+      info.barSize = g_window.barSize;
+      info.firstReversed = g_window.firstReversed;
       g_window.effect = g_window.transition->make(g_window.option ? g_window.option->id : "", info);
    }
 }
@@ -1135,6 +1140,54 @@ void showDescription(const transitions::Transition& transition)
 
 // The option field for the transition the window shows: its own label and list, the option it
 // was used with last; hidden for a transition without options.
+// Alternating Slide's own settings: the width of a bar and which way the first bar slides.
+bool barsApply() { return g_window.transition && transitions::same(g_window.transition->id, "alternating_slide"); }
+bool barsAreRows() { return !g_window.option || !transitions::same(g_window.option->id, "vertical"); }
+
+// The most rows (or columns) a bar can have: half the picture, at most 32.
+uint32_t barLimit()
+{
+   const uint32_t extent = barsAreRows() ? g_window.source.originalHeight : g_window.source.originalWidth;
+   return std::clamp<uint32_t>(extent / 2u, 1u, 32u);
+}
+
+std::string barChoices()
+{
+   std::string choices;
+   for (uint32_t n = 1; n <= barLimit(); ++n)
+      choices += (n > 1 ? "\n" : "") + std::to_string(n);
+   return choices;
+}
+
+const char* firstSlideLabel() { return barsAreRows() ? "First row slides" : "First column slides"; }
+
+// Translated choices: "a=Left" shows "Links" in German.
+std::string firstSlideChoicesShown()
+{
+   return barsAreRows() ? std::string("a=") + i18n::tr("Left") + "\nb=" + i18n::tr("Right")
+                        : std::string("a=") + i18n::tr("Up") + "\nb=" + i18n::tr("Down");
+}
+
+void updateBars()
+{
+   g_window.barSize = std::clamp<uint32_t>(g_window.barSize, 1u, barLimit());
+   const std::string choices = barChoices(), first = firstSlideChoicesShown();
+   const std::string value = std::to_string(g_window.barSize);
+   ColorizingDMDFormFieldUpdate size =
+      changeOf(CDMDPI_FORM_SET_VISIBLE | CDMDPI_FORM_SET_CHOICES | CDMDPI_FORM_SET_VALUE);
+   size.visible = barsApply() ? 1 : 0;
+   size.choices = choices.c_str();
+   size.value = value.c_str();
+   update(kFieldBarSize, size);
+   ColorizingDMDFormFieldUpdate which =
+      changeOf(CDMDPI_FORM_SET_VISIBLE | CDMDPI_FORM_SET_LABEL | CDMDPI_FORM_SET_CHOICES | CDMDPI_FORM_SET_VALUE);
+   which.visible = barsApply() ? 1 : 0;
+   which.label = i18n::tr(firstSlideLabel());
+   which.choices = first.c_str();
+   which.value = g_window.firstReversed ? "b" : "a";
+   update(kFieldFirstSlide, which);
+}
+
 void updateOption()
 {
    const transitions::Transition& transition = *g_window.transition;
@@ -1144,7 +1197,7 @@ void updateOption()
       ColorizingDMDFormFieldUpdate change = changeOf(CDMDPI_FORM_SET_VISIBLE);
       change.visible = 0;
       update(kFieldOption, change);
-      update(kFieldGap, change);
+      updateBars();
       showDescription(transition);
       return;
    }
@@ -1158,9 +1211,7 @@ void updateOption()
    change.value = g_window.option->id;
    update(kFieldOption, change);
    showDescription(transition);
-   ColorizingDMDFormFieldUpdate gap = changeOf(CDMDPI_FORM_SET_VISIBLE);
-   gap.visible = 1;
-   update(kFieldGap, gap);
+   updateBars();
 }
 
 // The "Second frame" field: shown for a transition to another frame, by the transitions that can
@@ -1247,6 +1298,17 @@ void MSGPIAPI onFieldChanged(void* /*userData*/, const char* key)
       g_window.option = transitions::findOption(*g_window.transition, formValue(kFieldOption, "").c_str());
       if (g_window.option)
          saveSetting(optionKey(*g_window.transition).c_str(), g_window.option->id);
+      updateBars(); // the bars of rows and of columns have different limits and names
+      makeEffect();
+      updateFrames();
+   }
+   else if (field == kFieldBarSize || field == kFieldFirstSlide)
+   {
+      g_window.barSize = static_cast<uint32_t>(std::max(1l, std::strtol(formValue(kFieldBarSize, "1").c_str(), nullptr, 10)));
+      g_window.firstReversed = formValue(kFieldFirstSlide, "a") == "b";
+      g_window.barSize = std::clamp<uint32_t>(g_window.barSize, 1u, barLimit());
+      saveSetting(kFieldBarSize, std::to_string(g_window.barSize));
+      saveSetting(kFieldFirstSlide, g_window.firstReversed ? "b" : "a");
       makeEffect();
       updateFrames();
    }
@@ -1284,6 +1346,8 @@ void MSGPIAPI onWindowClosed(void* /*userData*/, uint32_t result)
    g_window.toFrame = formValue(kFieldTarget, "black") == "frame";
    g_window.toWhite = formValue(kFieldTarget, "black") == "white";
    g_window.secondMoves = formValue(kFieldMotion, "still") == "moves";
+   g_window.barSize = static_cast<uint32_t>(std::max(1l, std::strtol(formValue(kFieldBarSize, "1").c_str(), nullptr, 10)));
+   g_window.firstReversed = formValue(kFieldFirstSlide, "a") == "b";
    reloadSource();
    if (!g_window.sourceProblem.empty())
    {
@@ -1389,6 +1453,9 @@ void MSGPIAPI onMenuEntry(void* /*userData*/)
                              : nullptr;
    g_window.toWhite = setting(kFieldTarget, "black") == "white";
    g_window.secondMoves = setting(kFieldMotion, "still") == "moves";
+   g_window.barSize = static_cast<uint32_t>(std::max(1l, std::strtol(setting(kFieldBarSize, "1").c_str(), nullptr, 10)));
+   g_window.firstReversed = setting(kFieldFirstSlide, "a") == "b";
+   g_window.barSize = std::clamp<uint32_t>(g_window.barSize, 1u, barLimit());
    makeEffect();
 
    std::string transitionChoices;
@@ -1399,6 +1466,8 @@ void MSGPIAPI onMenuEntry(void* /*userData*/)
       transitionChoices += std::string(entry.id) + "=" + i18n::tr(entry.label);
    }
    const std::string note = sourceNote();
+   const std::string barList = barChoices(), barValue = std::to_string(g_window.barSize),
+                     firstList = firstSlideChoicesShown();
    const std::string options = transition.optionCount ? optionChoices(transition) : "-";
    const std::string optionValue = g_window.option ? g_window.option->id : "-";
    const std::string frames = framesChoices();
@@ -1429,17 +1498,19 @@ void MSGPIAPI onMenuEntry(void* /*userData*/)
       {"sep0", kSeparator, CDMDPI_FIELD_NOTE, nullptr, nullptr, nullptr, 0, nullptr, 0},
       {kFieldTransition, i18n::tr("Transition"), CDMDPI_FIELD_RADIO, transition.id, transitionChoices.c_str(),
        i18n::tr(transition.description), 0, nullptr, 0},
-      {kFieldGap, kGap, CDMDPI_FIELD_NOTE, nullptr, nullptr, nullptr, transition.optionCount ? 0u : CDMDPI_FORM_HIDDEN,
-       nullptr, 0},
       {kFieldOption, i18n::tr(transition.optionLabel ? transition.optionLabel : "Option"), CDMDPI_FIELD_RADIO,
        optionValue.c_str(), options.c_str(), nullptr, transition.optionCount ? 0u : CDMDPI_FORM_HIDDEN,
        nullptr, 0},
+      {kFieldBarSize, i18n::tr("Bar width (pixels)"), CDMDPI_FIELD_CHOICE, barValue.c_str(), barList.c_str(),
+       i18n::tr("A bar is this many rows (Horizontal) or columns (Vertical)."), barsApply() ? 0u : CDMDPI_FORM_HIDDEN,
+       nullptr, 0},
+      {kFieldFirstSlide, i18n::tr(firstSlideLabel()), CDMDPI_FIELD_RADIO, g_window.firstReversed ? "b" : "a",
+       firstList.c_str(), nullptr, barsApply() ? 0u : CDMDPI_FORM_HIDDEN, nullptr, 0},
       {"sep1", kSeparator, CDMDPI_FIELD_NOTE, nullptr, nullptr, nullptr, 0, nullptr, 0},
       {kFieldMotion, i18n::tr("Second frame"), CDMDPI_FIELD_RADIO, g_window.secondMoves ? "moves" : "still",
        motions.c_str(),
-       i18n::tr("Stays in place: the second frame is not moved, the effect uncovers it. Moves in with the effect: the "
-                "second frame follows the first one in, in the same pattern (a slide pushes it in, a melt lets it "
-                "drip in from the top ...)."),
+       i18n::tr("Stays in place: the effect uncovers the second frame. Moves in: the second frame follows the first "
+                "one in, in the same pattern."),
        g_window.toFrame && transition.canMoveSecond ? 0u : CDMDPI_FORM_HIDDEN, nullptr, 0},
       {"sep2", kSeparator, CDMDPI_FIELD_NOTE, nullptr, nullptr, nullptr, 0, nullptr, 0},
       {kFieldFrames, i18n::tr("Number of frames"), CDMDPI_FIELD_CHOICE, framesStart.c_str(), frames.c_str(), help.c_str(), 0,
@@ -1450,12 +1521,11 @@ void MSGPIAPI onMenuEntry(void* /*userData*/)
                 "128 x 32 frames."),
        0, nullptr, 0},
       {kFieldDuration, i18n::tr("Frame duration of the scene (ms)"), CDMDPI_FIELD_TEXT, duration.c_str(), nullptr,
-       i18n::tr("How long each frame of the scene shows. The other settings of the scene are the editor's defaults; "
-                "change them in the Scenes section."),
+       i18n::tr("How long each frame of the scene shows. The scene's other settings are in the Scenes section."),
        placement == "scene" ? 0u : CDMDPI_FORM_HIDDEN, nullptr, 0},
       {kFieldInclude, i18n::tr("Also include in the scene"), CDMDPI_FIELD_RADIO, includeValue.c_str(), includes.c_str(),
-       i18n::tr("Adds the starting frame (unchanged) and/or the ending frame (the other frame) to the scene, to set "
-                "their timing. They do not count towards the number of frames above."),
+       i18n::tr("Adds the starting frame (unchanged) and/or the ending frame (the other frame) to the scene for its "
+                "timing. They do not count towards the number of frames above."),
        placement == "scene" ? 0u : CDMDPI_FORM_HIDDEN, nullptr, 0},
       {"sep4", kSeparator, CDMDPI_FIELD_NOTE, nullptr, nullptr, nullptr, 0, nullptr, 0},
       {kFieldPreview, i18n::tr("Preview"), CDMDPI_FIELD_IMAGE, nullptr, nullptr, nullptr,

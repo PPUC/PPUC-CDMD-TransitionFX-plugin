@@ -8,7 +8,7 @@ new frames, or as a scene, from a frame of your project. It needs the editor's p
 
 | Transition | Options | What it does |
 | --- | --- | --- |
-| **Alternating Slide** | Horizontal, Vertical | Horizontal: even rows (0, 2, 4) slide left and odd rows (1, 3, 5) slide right. Vertical: even columns (0, 2, 4) slide up and odd columns (1, 3, 5) slide down. |
+| **Alternating Slide** | Horizontal, Vertical | Bars slide in alternate directions. Horizontal: bars of rows slide left and right. Vertical: bars of columns slide up and down. **Bar width** is how many rows or columns make one bar (1 to 32, at most half the picture); **First row slides** (Left/Right) or **First column slides** (Up/Down) says which way the first bar goes. For example, Vertical with a bar width of 8 and the first column sliding Down: the first 8 columns go down, the next 8 go up. |
 | **Blinds** | Horizontal, Vertical | Bars at regular intervals grow wider. |
 | **Checkerboard** | 2 x 2, 4 x 4, 8 x 8, 16 x 16 | The picture is cut into squares of the size you choose. They disappear one by one: first the squares of one color of a checkerboard, sweeping from the top left corner, then the others. |
 | **Dissolve** | Orderly, Random, WPC | Pixels disappear in a regular pattern, or at random. WPC is the dot pattern many Bally/Williams games use: one eighth of the pixels at a time, in a fixed pattern (always 7 frames: the number of frames is fixed, by design). |
