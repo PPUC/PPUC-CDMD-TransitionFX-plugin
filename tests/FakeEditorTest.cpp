@@ -3011,30 +3011,29 @@ void testScene()
    CHECK(g_status.size() == 1 && g_status[0].find("as scene 50000") != std::string::npos);
    CHECK(g_settings["duration"] == "40");
 
-   // The starting and the ending frame can join the scene; they do not count as steps.
+   // The starting frame can join the scene; it does not count as a step.
    resetProject(128, 32, true);
    mark(1, 7);
    openMenu();
-   CHECK(fieldOf("include_start") && fieldOf("include_end") && !fieldOf("include_start")->visible);
+   CHECK(fieldOf("include") && !fieldOf("include")->visible);
    change("transition", "slide");
    change("option", "up");
    change("frames", "5");
    change("placement", "scene");
-   CHECK(fieldOf("include_start")->visible && fieldOf("include_end")->visible);
-   change("include_start", "1");
-   change("include_end", "1");
+   CHECK(fieldOf("include")->visible);
+   // To black there is no ending frame to offer.
+   CHECK((choiceValues(*fieldOf("include")) == std::vector<std::string>{"none", "start"}));
+   change("include", "start");
    closeForm(true);
    CHECK(g_endEditApplied == 1 && g_messages.empty() && g_scenes.size() == 1);
-   CHECK(g_scenes.size() == 1 && g_scenes[0].frames == 7);
-   CHECK(g_frames.size() == 9);
-   if (g_frames.size() == 9)
+   CHECK(g_scenes.size() == 1 && g_scenes[0].frames == 6);
+   CHECK(g_frames.size() == 8);
+   if (g_frames.size() == 8)
    {
-      // First frame of the scene: the starting frame as it is; last: all black.
       CHECK(g_frames[1].original == g_frames[0].original);
-      CHECK(litPixels(g_frames[7]) == 0);
       CHECK(litPixels(g_frames[1]) > litPixels(g_frames[2]));
    }
-   CHECK(statusFrames(1, 7));
+   CHECK(statusFrames(1, 6));
 
    // Only the ending frame, to another frame: it is the other frame as it is.
    resetProject(128, 32, true);
@@ -3046,7 +3045,8 @@ void testScene()
    change("option", "left");
    change("frames", "2");
    change("placement", "scene");
-   change("include_end", "1");
+   CHECK((choiceValues(*fieldOf("include")) == std::vector<std::string>{"none", "start", "end", "both"}));
+   change("include", "end");
    closeForm(true);
    CHECK(g_scenes.size() == 1 && g_scenes[0].frames == 3 && g_frames.size() == 5);
    if (g_frames.size() == 5)

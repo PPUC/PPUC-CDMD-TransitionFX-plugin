@@ -87,12 +87,11 @@ it starts as the duration of your frame. The scene's other settings are the edit
 starting frame started another scene before, it starts the new one now, and the plugin tells you.
 A frame of a scene has no dynamic zones, so the scene's frames have none.
 
-Two check boxes, **Include the starting frame in the scene** and **Include the ending frame in the
-scene**, add a frame at the beginning and/or the end of the scene. The starting frame is your frame
-unchanged; the ending frame is the frame the transition reaches: the other frame as it is, or all
-black or all white. They are there so you can give those frames their own timing in the editor's
-Scenes section. **They do not count towards the number of frames**: with 10 frames and both boxes
-checked the scene holds 12 frames, 10 of them the transition's steps.
+The field **Also in the scene** adds the **starting frame** (your frame, unchanged) as the scene's
+first frame, and, for a transition to another frame, the **ending frame** (the other frame, as it
+is) as its last. They are there so you can give those frames their own timing in the editor's
+Scenes section. **They do not count towards the number of frames**: with 10 frames and both
+added the scene holds 12 frames, 10 of them the transition's steps.
 
 All of it, frames and scene, is one step of the editor's history.
 

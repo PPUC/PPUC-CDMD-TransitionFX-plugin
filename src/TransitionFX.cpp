@@ -64,8 +64,7 @@ constexpr const char* kFieldGap = "gap";
 constexpr const char* kGap = "<span>&nbsp;</span>";
 constexpr const char* kFieldPlacement = "placement"; // "after", "end" or "scene"
 constexpr const char* kFieldDuration = "duration";   // the scene's frame duration
-constexpr const char* kFieldIncludeStart = "include_start"; // the scene also holds the starting frame
-constexpr const char* kFieldIncludeEnd = "include_end";     // the scene also holds the ending frame
+constexpr const char* kFieldInclude = "include"; // "none", "start", "end" or "both": extra frames of the scene
 constexpr const char* kFieldPreview = "preview";
 
 // The scenes libserum plays need ROM frames of this size.
@@ -1164,8 +1163,31 @@ void updateOption()
 
 // The "Second frame" field: shown for a transition to another frame, by the transitions that can
 // bring that frame in with the effect.
+std::string includeChoices(bool toFrame)
+{
+   std::string choices = std::string("none=") + i18n::tr("Neither") + "\nstart=" + i18n::tr("Starting frame");
+   if (toFrame)
+      choices += std::string("\nend=") + i18n::tr("Ending frame") + "\nboth=" + i18n::tr("Both");
+   return choices;
+}
+
+// The "Also in the scene" field: for a scene only; the ending frame only for a transition to another frame.
+void updateInclude()
+{
+   const std::string choices = includeChoices(g_window.toFrame);
+   std::string value = formValue(kFieldInclude, "none");
+   if (!g_window.toFrame && value != "start")
+      value = "none";
+   ColorizingDMDFormFieldUpdate change = changeOf(CDMDPI_FORM_SET_VISIBLE | CDMDPI_FORM_SET_CHOICES | CDMDPI_FORM_SET_VALUE);
+   change.visible = formValue(kFieldPlacement, "after") == "scene" ? 1 : 0;
+   change.choices = choices.c_str();
+   change.value = value.c_str();
+   update(kFieldInclude, change);
+}
+
 void updateMotion()
 {
+   updateInclude();
    ColorizingDMDFormFieldUpdate change = changeOf(CDMDPI_FORM_SET_VISIBLE);
    change.visible = g_window.toFrame && g_window.transition && g_window.transition->canMoveSecond ? 1 : 0;
    update(kFieldMotion, change);
@@ -1176,8 +1198,7 @@ void updateDuration()
    ColorizingDMDFormFieldUpdate change = changeOf(CDMDPI_FORM_SET_VISIBLE);
    change.visible = formValue(kFieldPlacement, "after") == "scene" ? 1 : 0;
    update(kFieldDuration, change);
-   update(kFieldIncludeStart, change);
-   update(kFieldIncludeEnd, change);
+   updateInclude();
 }
 
 // The current frame or the project changed: the window starts from the current frame now.
@@ -1313,10 +1334,11 @@ void MSGPIAPI onWindowClosed(void* /*userData*/, uint32_t result)
          return;
       }
       request.sceneDurationMs = static_cast<uint32_t>(duration);
-      request.includeStart = formValue(kFieldIncludeStart, "0") == "1";
-      request.includeEnd = formValue(kFieldIncludeEnd, "0") == "1";
-      saveSetting(kFieldIncludeStart, request.includeStart ? "1" : "0");
-      saveSetting(kFieldIncludeEnd, request.includeEnd ? "1" : "0");
+      const std::string include = formValue(kFieldInclude, "none");
+      request.includeStart = include == "start" || include == "both";
+      // The ending frame is the other frame: only a transition to another frame has one.
+      request.includeEnd = g_window.toFrame && (include == "end" || include == "both");
+      saveSetting(kFieldInclude, include);
    }
 
    Result made;
@@ -1388,8 +1410,10 @@ void MSGPIAPI onMenuEntry(void* /*userData*/)
    std::string duration = setting(kFieldDuration, "");
    if (duration.empty())
       duration = std::to_string(g_window.source.info.durationMs ? g_window.source.info.durationMs : 33);
-   const std::string includeStart = setting(kFieldIncludeStart, "0") == "1" ? "1" : "0";
-   const std::string includeEnd = setting(kFieldIncludeEnd, "0") == "1" ? "1" : "0";
+   std::string includeValue = setting(kFieldInclude, "none");
+   if (includeValue != "start" && !(g_window.toFrame && (includeValue == "end" || includeValue == "both")))
+      includeValue = "none";
+   const std::string includes = includeChoices(g_window.toFrame);
    const PreviewPictures pictures = makePreview(static_cast<uint32_t>(std::strtol(framesStart.c_str(), nullptr, 10)));
 
    const std::string targets = std::string("black=") + i18n::tr("Black") + "\nwhite=" + i18n::tr("White") +
@@ -1426,15 +1450,9 @@ void MSGPIAPI onMenuEntry(void* /*userData*/)
        i18n::tr("How long each frame of the scene shows. The other settings of the scene are the editor's defaults; "
                 "change them in the Scenes section."),
        placement == "scene" ? 0u : CDMDPI_FORM_HIDDEN, nullptr, 0},
-      {kFieldIncludeStart, i18n::tr("Include the starting frame in the scene"), CDMDPI_FIELD_CHECKBOX,
-       includeStart.c_str(), nullptr,
-       i18n::tr("Adds the starting frame, unchanged, as the first frame of the scene. Handy to set its timing. It "
-                "does not count towards the number of frames above."),
-       placement == "scene" ? 0u : CDMDPI_FORM_HIDDEN, nullptr, 0},
-      {kFieldIncludeEnd, i18n::tr("Include the ending frame in the scene"), CDMDPI_FIELD_CHECKBOX, includeEnd.c_str(),
-       nullptr,
-       i18n::tr("Adds the ending frame (the other frame, or all black or all white) as the last frame of the scene. "
-                "Handy to set its timing. It does not count towards the number of frames above."),
+      {kFieldInclude, i18n::tr("Also in the scene"), CDMDPI_FIELD_RADIO, includeValue.c_str(), includes.c_str(),
+       i18n::tr("Adds the starting frame (unchanged) and/or the ending frame (the other frame) to the scene, to set "
+                "their timing. They do not count towards the number of frames above."),
        placement == "scene" ? 0u : CDMDPI_FORM_HIDDEN, nullptr, 0},
       {"sep4", kSeparator, CDMDPI_FIELD_NOTE, nullptr, nullptr, nullptr, 0, nullptr, 0},
       {kFieldPreview, i18n::tr("Preview"), CDMDPI_FIELD_IMAGE, nullptr, nullptr, nullptr,
