@@ -1450,7 +1450,7 @@ void testTheWindow()
    CHECK(fieldOf("gap") && fieldOf("gap")->visible);
    if (o)
    {
-      const std::vector<std::string> want = {"orderly", "random"};
+      const std::vector<std::string> want = {"orderly", "random", "wpc"};
       CHECK(choiceValues(*o) == want);
       CHECK(o->label == "Dissolve Type" && o->value == "orderly");
       CHECK(o->help.empty() && fieldOf("transition")->help.find("Random") != std::string::npos);
@@ -2789,6 +2789,51 @@ void testLanguages()
       CHECK(translated(makeEffect(c, 128, 32)->limitReason()));
 }
 
+// Dissolve WPC: the dot pattern of the Bally/Williams games, as recorded from a real transition
+// (128 x 32): every step takes one more eighth of the pixels, 7 steps.
+void testWpc()
+{
+   const uint32_t w = 128, h = 32;
+   auto e = makeNamed("dissolve", "wpc", w, h);
+   CHECK(e->maxSteps() == 7);
+   // The groups as recorded: row 0, the first 24 pixels; row 1 and row 3, the first 8.
+   const uint32_t row0[] = {4, 1, 6, 3, 0, 5, 2, 7, 5, 2, 7, 4, 1, 6, 3, 0, 6, 3, 0, 5, 2, 7, 4, 1};
+   const uint32_t row1[] = {2, 7, 4, 1, 6, 3, 0, 5};
+   const uint32_t row3[] = {6, 3, 0, 5, 2, 7, 4, 1};
+   for (uint32_t x = 0; x < 24; ++x)
+      CHECK(transitions::wpcGroup(x, 0) == row0[x]);
+   for (uint32_t x = 0; x < 8; ++x)
+   {
+      CHECK(transitions::wpcGroup(x, 1) == row1[x]);
+      CHECK(transitions::wpcGroup(x, 3) == row3[x]);
+   }
+   // The pattern repeats every 4 rows and every 64 columns.
+   for (uint32_t y = 0; y < h; ++y)
+      for (uint32_t x = 0; x < w; ++x)
+         CHECK(transitions::wpcGroup(x, y) == transitions::wpcGroup(x % 64, y % 4));
+   // With 7 frames, frame n has lost the groups 0 .. n - 1: an eighth (512 pixels) more each time, and
+   // the pixels that are gone are the ones the recording lights.
+   for (uint32_t step = 1; step <= 7; ++step)
+   {
+      size_t visible = 0;
+      for (uint32_t y = 0; y < h; ++y)
+         for (uint32_t x = 0; x < w; ++x)
+         {
+            const transitions::Rule r = e->rule(x, y, step, 7);
+            CHECK(r.visible == (transitions::wpcGroup(x, y) >= step));
+            visible += r.visible ? 1 : 0;
+         }
+      CHECK(visible == w * h - 512 * step);
+   }
+   // With fewer frames, several groups go at once, and the last frame still keeps the last group.
+   for (uint32_t steps : {1u, 2u, 3u, 5u})
+   {
+      CHECK(visibleCount(*e, w, h, steps, steps) == w * h / 8);
+      for (uint32_t step = 1; step < steps; ++step)
+         CHECK(visibleCount(*e, w, h, step, steps) > visibleCount(*e, w, h, step + 1, steps));
+   }
+}
+
 void testSecondMovesWindow()
 {
    // The "Second frame" field: only for another frame and for the transitions that can do it.
@@ -3050,6 +3095,7 @@ int main()
    testMorph();
    testMorphThroughTheWindow();
    testSecondMovesWindow();
+   testWpc();
    testLanguages();
    testVersionAndDescriptions();
    testCheckerboard();

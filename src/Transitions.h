@@ -164,6 +164,27 @@ private:
    uint64_t m_pixels;
 };
 
+inline uint32_t ladderLevel(uint32_t levels, uint32_t step, uint32_t steps);
+
+// The pattern many Bally/Williams (WPC) games dissolve with: the pixels are in eight groups, and every
+// step takes one more group (an eighth of the picture) in a fixed dot pattern. The group of a pixel
+// (0 goes first, 7 last) was read from a recording of the real transition: along a row it steps by 5
+// (mod 8), the next block of eight pixels starts one higher, and the next row two lower.
+inline uint32_t wpcGroup(uint32_t x, uint32_t y) { return (4u + 5u * (x & 7u) + (x >> 3) + 6u * y) & 7u; }
+
+// WPC: at step `step` of `steps` the first groups are gone, so that the picture loses an eighth at a
+// time; the last step keeps one group. With fewer steps, several groups go at once.
+class WpcDissolve final : public Effect
+{
+public:
+   uint32_t maxSteps() const override { return 7; }
+   const char* limitReason() const override { return "the pattern has 8 groups of pixels"; }
+   Rule rule(uint32_t x, uint32_t y, uint32_t step, uint32_t steps) const override
+   {
+      return {wpcGroup(x, y) >= ladderLevel(7, step, steps), x, y};
+   }
+};
+
 // The order in which a dissolve takes the pixels.
 enum class Order
 {
@@ -1514,6 +1535,7 @@ inline bool follows(const SourceInfo& s) { return s.toFrame && s.secondMoves; }
 inline std::unique_ptr<Effect> makeDissolve(const char* option, const SourceInfo& s)
 {
    if (same(option, "random")) return std::make_unique<RankDissolve>(Order::Random, s.width, s.height);
+   if (same(option, "wpc")) return std::make_unique<WpcDissolve>();
    return std::make_unique<OrderlyDissolve>(s.width, s.height);
 }
 
@@ -1607,7 +1629,7 @@ inline std::unique_ptr<Effect> makeMorph(const char* option, const SourceInfo& s
 }
 
 inline const Option kDissolveOptions[] = {
-   {"orderly", "Orderly"}, {"random", "Random"},
+   {"orderly", "Orderly"}, {"random", "Random"}, {"wpc", "WPC"},
 };
 inline const Option kDirectionOptions[] = {
    {"up", "Up"}, {"down", "Down"}, {"left", "Left"}, {"right", "Right"},
@@ -1654,7 +1676,8 @@ inline const Transition kTransitions[] = {
    {"dissolve", "Dissolve",
     "The picture dissolves pixel by pixel.\n"
     "Orderly: pixels disappear in a regular pattern.\n"
-    "Random: pixels disappear at random.",
+    "Random: pixels disappear at random.\n"
+    "WPC: the dot pattern of the Bally/Williams games, an eighth of the pixels at a time.",
     "Dissolve Type", kDissolveOptions, TB_COUNT(kDissolveOptions), &makeDissolve},
    {"dust", "Dust",
     "The picture crumbles to dust and the wind blows it away.\n"
