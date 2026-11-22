@@ -87,6 +87,13 @@ it starts as the duration of your frame. The scene's other settings are the edit
 starting frame started another scene before, it starts the new one now, and the plugin tells you.
 A frame of a scene has no dynamic zones, so the scene's frames have none.
 
+Two check boxes, **Include the starting frame in the scene** and **Include the ending frame in the
+scene**, add a frame at the beginning and/or the end of the scene. The starting frame is your frame
+unchanged; the ending frame is the frame the transition reaches: the other frame as it is, or all
+black or all white. They are there so you can give those frames their own timing in the editor's
+Scenes section. **They do not count towards the number of frames**: with 10 frames and both boxes
+checked the scene holds 12 frames, 10 of them the transition's steps.
+
 All of it, frames and scene, is one step of the editor's history.
 
 ## Installing it
@@ -94,8 +101,8 @@ All of it, frames and scene, is one step of the editor's history.
 1. Get the plugin folder `TransitionFX` (see "Getting the plugin" below). It contains
    `plugin.cfg` and the plugin libraries: `plugin-transitionfx64.dll` (Windows x64),
    `plugin-transitionfx.dll` (Windows x86), `plugin-transitionfx.so` (Linux x64 and aarch64) and
-   `plugin-transitionfx.dylib` (macOS arm64). The folder from the `TransitionFX-all-platforms_v1.01`
-   download holds all of them; the editor loads the one that fits the computer.
+   `plugin-transitionfx.dylib` (macOS arm64). The download for your platform holds the library
+   that fits your computer.
 2. In the editor, open `Settings -> Plugins` and click `Open Folder`. Put the whole
    `TransitionFX` folder into that folder (on Windows usually
    `%APPDATA%\ppuc.org\PPUC Colorizing DMD\plugins`), so that `plugin.cfg` is at
@@ -118,9 +125,8 @@ GitHub builds it for you, for Windows (x64 and x86), Linux (x64 and aarch64) and
 
 1. Open the repository's `Actions` tab. The `Build plugin` run starts by itself after a push (or
    choose it and click `Run workflow`).
-2. When the run is green, open it and download `TransitionFX-all-platforms_v1.01` (the version is in the name) under `Artifacts`
-   (or the one for your platform, such as `TransitionFX-windows-x64_v1.01`). Unpack it: it holds the
-   `TransitionFX` folder from the steps above.
+2. When the run is green, open it and download the one for your platform under `Artifacts`, such as `TransitionFX-windows-x64_v1.02`
+   (the version is in the name). Unpack it: it holds the `TransitionFX` folder from the steps above.
 
 Every platform build also runs the tests. They come after the upload, so a failing test never
 hides the plugin, but a red job means something is wrong on that platform; the failing line says
@@ -255,6 +261,6 @@ have both.
 
 ## Version
 
-The window's title shows the version (`TransitionFX v1.01`), and the files the build makes carry it (`TransitionFX-windows-x64_v1.01`). It is `kVersion` in `src/Version.h`;
+The window's title shows the version (`TransitionFX v1.02`), and the files the build makes carry it (`TransitionFX-windows-x64_v1.02`). It is `kVersion` in `src/Version.h`;
 raise it by 0.01 with every update merged into the main branch, and keep `version` in `plugin.cfg`
 the same.

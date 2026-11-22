@@ -64,6 +64,8 @@ constexpr const char* kFieldGap = "gap";
 constexpr const char* kGap = "<span>&nbsp;</span>";
 constexpr const char* kFieldPlacement = "placement"; // "after", "end" or "scene"
 constexpr const char* kFieldDuration = "duration";   // the scene's frame duration
+constexpr const char* kFieldIncludeStart = "include_start"; // the scene also holds the starting frame
+constexpr const char* kFieldIncludeEnd = "include_end";     // the scene also holds the ending frame
 constexpr const char* kFieldPreview = "preview";
 
 // The scenes libserum plays need ROM frames of this size.
@@ -575,6 +577,8 @@ struct Request
    uint32_t steps = 0;
    std::string placement; // "after", "end" or "scene"
    uint32_t sceneDurationMs = 0;
+   bool includeStart = false; // scenes only: the starting frame, unchanged, as the scene's first frame
+   bool includeEnd = false;   // scenes only: the ending frame (the other frame, black or white), as its last
 };
 
 // What Apply made, for the status bar.
@@ -655,6 +659,60 @@ std::string createTransition(const Request& request, Result& result)
    // brightest shade, RGB565 0xFFFF). Such a pixel is in no dynamic zone.
    const uint8_t fillShade = g_window.toWhite ? static_cast<uint8_t>(source.colorCount - 1u) : static_cast<uint8_t>(0);
    const uint16_t fillColor = g_window.toWhite ? static_cast<uint16_t>(0xFFFF) : static_cast<uint16_t>(0);
+
+   // A frame of the scene that is not a step of the effect: the starting frame as it is, or the end
+   // the transition reaches (the other frame as it is, or all black, or all white).
+   auto addEdge = [&](bool atEnd) -> std::string {
+      const bool other = atEnd && toFrame;
+      const bool filled = atEnd && !toFrame;
+      const Source& from = other ? second : source;
+      const std::string which = i18n::tr(atEnd ? "the ending frame" : "the starting frame");
+      if (filled)
+         stepOriginal.assign(source.original.size(), fillShade);
+      const std::vector<uint8_t>& original = filled ? stepOriginal : from.original;
+      uint32_t newFrame = CDMDPI_NONE;
+      if (!g_editor->AddFrame(g_endpoint, original.data(), static_cast<uint32_t>(original.size()), from.frame,
+                              &newFrame) ||
+          newFrame == CDMDPI_NONE)
+         return i18n::fmt("The editor refused to add %1.", {which});
+      created.push_back(newFrame);
+      if (!g_editor->SetFrameComparison(g_endpoint, newFrame, CDMDPI_NONE, from.info.shapeMode))
+         return i18n::fmt("The editor refused to clear the comparison mask of %1.", {which});
+      for (size_t index = 0; index < source.planes.size(); ++index)
+      {
+         const Plane& plane = other ? second.planes[index] : source.planes[index];
+         const std::vector<uint16_t>* pixels = &plane.pixels;
+         if (filled)
+         {
+            stepPixels.assign(plane.pixels.size(), fillColor);
+            pixels = &stepPixels;
+         }
+         if (!g_editor->SetFramePicture(g_endpoint, newFrame, plane.hd, pixels->data(), nullptr,
+                                        static_cast<uint32_t>(pixels->size())))
+            return i18n::fmt("The editor refused the picture of %1.", {which});
+      }
+      if (filled)
+      {
+         // All one shade: no pixel is in a dynamic zone, and no rotation keeps turning colors.
+         if (!source.zones.empty())
+         {
+            stepZones.assign(source.zones.size(), 255);
+            if (!g_editor->SetDynamicZones(g_endpoint, newFrame, stepZones.data(),
+                                           static_cast<uint32_t>(stepZones.size())))
+               return i18n::fmt("The editor refused the dynamic zones of %1.", {which});
+         }
+         if (!g_editor->ClearColorRotations(g_endpoint, newFrame))
+            return i18n::fmt("The editor refused to clear the color rotations of %1.", {which});
+      }
+      return std::string();
+   };
+
+   if (scene && request.includeStart)
+   {
+      const std::string why = addEdge(false);
+      if (!why.empty())
+         return fail(why);
+   }
 
    for (uint32_t step = 1; step <= steps; ++step)
    {
@@ -738,6 +796,13 @@ std::string createTransition(const Request& request, Result& result)
          if (!g_editor->ClearColorRotations(g_endpoint, newFrame))
             return fail(i18n::fmt("The editor refused to clear the color rotations of %1.", {which}));
       }
+   }
+
+   if (scene && request.includeEnd)
+   {
+      const std::string why = addEdge(true);
+      if (!why.empty())
+         return fail(why);
    }
 
    if (scene)
@@ -1111,6 +1176,8 @@ void updateDuration()
    ColorizingDMDFormFieldUpdate change = changeOf(CDMDPI_FORM_SET_VISIBLE);
    change.visible = formValue(kFieldPlacement, "after") == "scene" ? 1 : 0;
    update(kFieldDuration, change);
+   update(kFieldIncludeStart, change);
+   update(kFieldIncludeEnd, change);
 }
 
 // The current frame or the project changed: the window starts from the current frame now.
@@ -1246,6 +1313,10 @@ void MSGPIAPI onWindowClosed(void* /*userData*/, uint32_t result)
          return;
       }
       request.sceneDurationMs = static_cast<uint32_t>(duration);
+      request.includeStart = formValue(kFieldIncludeStart, "0") == "1";
+      request.includeEnd = formValue(kFieldIncludeEnd, "0") == "1";
+      saveSetting(kFieldIncludeStart, request.includeStart ? "1" : "0");
+      saveSetting(kFieldIncludeEnd, request.includeEnd ? "1" : "0");
    }
 
    Result made;
@@ -1317,6 +1388,8 @@ void MSGPIAPI onMenuEntry(void* /*userData*/)
    std::string duration = setting(kFieldDuration, "");
    if (duration.empty())
       duration = std::to_string(g_window.source.info.durationMs ? g_window.source.info.durationMs : 33);
+   const std::string includeStart = setting(kFieldIncludeStart, "0") == "1" ? "1" : "0";
+   const std::string includeEnd = setting(kFieldIncludeEnd, "0") == "1" ? "1" : "0";
    const PreviewPictures pictures = makePreview(static_cast<uint32_t>(std::strtol(framesStart.c_str(), nullptr, 10)));
 
    const std::string targets = std::string("black=") + i18n::tr("Black") + "\nwhite=" + i18n::tr("White") +
@@ -1352,6 +1425,16 @@ void MSGPIAPI onMenuEntry(void* /*userData*/)
       {kFieldDuration, i18n::tr("Frame duration of the scene (ms)"), CDMDPI_FIELD_TEXT, duration.c_str(), nullptr,
        i18n::tr("How long each frame of the scene shows. The other settings of the scene are the editor's defaults; "
                 "change them in the Scenes section."),
+       placement == "scene" ? 0u : CDMDPI_FORM_HIDDEN, nullptr, 0},
+      {kFieldIncludeStart, i18n::tr("Include the starting frame in the scene"), CDMDPI_FIELD_CHECKBOX,
+       includeStart.c_str(), nullptr,
+       i18n::tr("Adds the starting frame, unchanged, as the first frame of the scene. Handy to set its timing. It "
+                "does not count towards the number of frames above."),
+       placement == "scene" ? 0u : CDMDPI_FORM_HIDDEN, nullptr, 0},
+      {kFieldIncludeEnd, i18n::tr("Include the ending frame in the scene"), CDMDPI_FIELD_CHECKBOX, includeEnd.c_str(),
+       nullptr,
+       i18n::tr("Adds the ending frame (the other frame, or all black or all white) as the last frame of the scene. "
+                "Handy to set its timing. It does not count towards the number of frames above."),
        placement == "scene" ? 0u : CDMDPI_FORM_HIDDEN, nullptr, 0},
       {"sep4", kSeparator, CDMDPI_FIELD_NOTE, nullptr, nullptr, nullptr, 0, nullptr, 0},
       {kFieldPreview, i18n::tr("Preview"), CDMDPI_FIELD_IMAGE, nullptr, nullptr, nullptr,
