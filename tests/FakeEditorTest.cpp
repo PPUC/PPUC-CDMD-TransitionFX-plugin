@@ -1349,7 +1349,8 @@ void testEveryTransitionThroughTheWindow(uint32_t w, uint32_t h, bool zones)
          continue; // goes to another frame only (testMorph)
       resetProject(w, h, zones);
       g_frames[0].comparisonMask = 3; // the source has a mask; the new frames must not
-      const uint32_t frames = transitions::same(c.transition->id, "dust") ? 3 : 5; // Dust has fewer frames on a busy picture
+      // Dust has fewer frames on a busy picture; WPC is always 7.
+      const uint32_t frames = transitions::same(c.transition->id, "dust") ? 3 : (c.option && transitions::same(c.option->id, "wpc") ? 7 : 5);
       if (!runFlow(c.transition->id, c.option ? c.option->id : nullptr, frames, "end", c.toWhite ? "white" : "black"))
       {
          std::printf("flow failed for %s on %ux%u\n", c.name().c_str(), w, h);
@@ -1573,7 +1574,7 @@ void testFramesListMatchesTheMaximum()
          // The plugin's own effect sees the real frame, whose colors differ from makeInfo: only
          // the geometry-bound transitions have to agree exactly.
          if (!isFade(c) && !e->movesPixels())
-            CHECK(choiceValues(*f).size() == e->maxSteps());
+            CHECK(choiceValues(*f).size() == e->maxSteps() - e->minSteps() + 1);
          CHECK(!choiceValues(*f).empty());
          closeForm(false);
       }
@@ -3021,8 +3022,15 @@ void testScene()
    change("frames", "5");
    change("placement", "scene");
    CHECK(fieldOf("include")->visible);
+   // The WPC dissolve is always its 7 frames.
+   change("transition", "dissolve");
+   change("option", "wpc");
+   CHECK((choiceValues(*fieldOf("frames")) == std::vector<std::string>{"7"}));
+   change("transition", "slide");
+   change("option", "up");
+   change("frames", "5");
    // To black there is no ending frame to offer.
-   CHECK((choiceValues(*fieldOf("include")) == std::vector<std::string>{"none", "start"}));
+   CHECK((choiceValues(*fieldOf("include")) == std::vector<std::string>{"start", "none"}));
    change("include", "start");
    closeForm(true);
    CHECK(g_endEditApplied == 1 && g_messages.empty() && g_scenes.size() == 1);
@@ -3045,7 +3053,7 @@ void testScene()
    change("option", "left");
    change("frames", "2");
    change("placement", "scene");
-   CHECK((choiceValues(*fieldOf("include")) == std::vector<std::string>{"none", "start", "end", "both"}));
+   CHECK((choiceValues(*fieldOf("include")) == std::vector<std::string>{"start", "end", "both", "none"}));
    change("include", "end");
    closeForm(true);
    CHECK(g_scenes.size() == 1 && g_scenes[0].frames == 3 && g_frames.size() == 5);

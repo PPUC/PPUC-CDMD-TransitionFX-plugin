@@ -613,7 +613,7 @@ std::string createTransition(const Request& request, Result& result)
    const bool scene = request.placement == "scene";
 
    // The window offers only numbers that work; this is the net under it.
-   if (steps < 1 || steps > effect.maxSteps())
+   if (steps < std::min(effect.minSteps(), effect.maxSteps()) || steps > effect.maxSteps())
       return i18n::fmt("This transition can make at most %1 different frames from this frame.",
                        {std::to_string(effect.maxSteps())});
    if (scene && !g_window.scenesPossible)
@@ -958,9 +958,10 @@ std::string framesChoices()
    if (most < 1)
       return std::string("0=") + i18n::tr("None (this transition can do nothing with this frame)");
    std::string choices;
-   for (uint32_t n = 1; n <= most; ++n)
+   const uint32_t least = g_window.effect ? std::min(g_window.effect->minSteps(), most) : 1u;
+   for (uint32_t n = least; n <= most; ++n)
    {
-      if (n > 1)
+      if (n > least)
          choices += '\n';
       choices += std::to_string(n);
    }
@@ -989,7 +990,8 @@ std::string framesValue(const std::string& wanted)
    if (most < 1)
       return "0";
    const long number = std::strtol(wanted.c_str(), nullptr, 10);
-   return std::to_string(std::clamp<long>(number, 1, most));
+   const long least = g_window.effect ? std::min<long>(g_window.effect->minSteps(), most) : 1;
+   return std::to_string(std::clamp<long>(number, least, most));
 }
 
 std::string sourceNote()
@@ -1165,10 +1167,10 @@ void updateOption()
 // bring that frame in with the effect.
 std::string includeChoices(bool toFrame)
 {
-   std::string choices = std::string("none=") + i18n::tr("Neither") + "\nstart=" + i18n::tr("Starting frame");
+   std::string choices = std::string("start=") + i18n::tr("Starting frame");
    if (toFrame)
-      choices += std::string("\nend=") + i18n::tr("Ending frame") + "\nboth=" + i18n::tr("Both");
-   return choices;
+      choices += std::string("\nend=") + i18n::tr("Ending frame") + "\nboth=" + i18n::tr("Both frames");
+   return choices + "\nnone=" + i18n::tr("Nothing");
 }
 
 // The "Also in the scene" field: for a scene only; the ending frame only for a transition to another frame.
@@ -1422,6 +1424,9 @@ void MSGPIAPI onMenuEntry(void* /*userData*/)
                                i18n::tr("Moves in with the effect");
    const ColorizingDMDFormField fields[] = {
       {kFieldSource, note.c_str(), CDMDPI_FIELD_NOTE, nullptr, nullptr, nullptr, 0, nullptr, 0},
+      {kFieldTarget, i18n::tr("Transition to"), CDMDPI_FIELD_RADIO,
+       g_window.toFrame ? "frame" : (g_window.toWhite ? "white" : "black"), targets.c_str(), nullptr, 0, nullptr, 0},
+      {"sep0", kSeparator, CDMDPI_FIELD_NOTE, nullptr, nullptr, nullptr, 0, nullptr, 0},
       {kFieldTransition, i18n::tr("Transition"), CDMDPI_FIELD_RADIO, transition.id, transitionChoices.c_str(),
        i18n::tr(transition.description), 0, nullptr, 0},
       {kFieldGap, kGap, CDMDPI_FIELD_NOTE, nullptr, nullptr, nullptr, transition.optionCount ? 0u : CDMDPI_FORM_HIDDEN,
@@ -1430,8 +1435,6 @@ void MSGPIAPI onMenuEntry(void* /*userData*/)
        optionValue.c_str(), options.c_str(), nullptr, transition.optionCount ? 0u : CDMDPI_FORM_HIDDEN,
        nullptr, 0},
       {"sep1", kSeparator, CDMDPI_FIELD_NOTE, nullptr, nullptr, nullptr, 0, nullptr, 0},
-      {kFieldTarget, i18n::tr("Transition to"), CDMDPI_FIELD_RADIO,
-       g_window.toFrame ? "frame" : (g_window.toWhite ? "white" : "black"), targets.c_str(), nullptr, 0, nullptr, 0},
       {kFieldMotion, i18n::tr("Second frame"), CDMDPI_FIELD_RADIO, g_window.secondMoves ? "moves" : "still",
        motions.c_str(),
        i18n::tr("Stays in place: the second frame is not moved, the effect uncovers it. Moves in with the effect: the "
@@ -1450,7 +1453,7 @@ void MSGPIAPI onMenuEntry(void* /*userData*/)
        i18n::tr("How long each frame of the scene shows. The other settings of the scene are the editor's defaults; "
                 "change them in the Scenes section."),
        placement == "scene" ? 0u : CDMDPI_FORM_HIDDEN, nullptr, 0},
-      {kFieldInclude, i18n::tr("Also in the scene"), CDMDPI_FIELD_RADIO, includeValue.c_str(), includes.c_str(),
+      {kFieldInclude, i18n::tr("Also include in the scene"), CDMDPI_FIELD_RADIO, includeValue.c_str(), includes.c_str(),
        i18n::tr("Adds the starting frame (unchanged) and/or the ending frame (the other frame) to the scene, to set "
                 "their timing. They do not count towards the number of frames above."),
        placement == "scene" ? 0u : CDMDPI_FORM_HIDDEN, nullptr, 0},

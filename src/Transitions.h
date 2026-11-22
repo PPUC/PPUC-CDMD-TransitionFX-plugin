@@ -83,6 +83,8 @@ public:
    // The most steps that still give frames that all differ (from each other and from the
    // starting frame). 0: the effect can do nothing with this frame.
    virtual uint32_t maxSteps() const = 0;
+   // The fewest steps that make sense: 1, but the WPC pattern is always its 7 steps.
+   virtual uint32_t minSteps() const { return 1; }
    // Why there is a most, in a few words, for the window that asks for the number of frames.
    virtual const char* limitReason() const = 0;
 
@@ -178,6 +180,7 @@ class WpcDissolve final : public Effect
 {
 public:
    uint32_t maxSteps() const override { return 7; }
+   uint32_t minSteps() const override { return 7; }
    const char* limitReason() const override { return "the pattern has 8 groups of pixels"; }
    Rule rule(uint32_t x, uint32_t y, uint32_t step, uint32_t steps) const override
    {

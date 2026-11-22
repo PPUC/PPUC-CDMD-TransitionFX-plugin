@@ -11,7 +11,7 @@ new frames, or as a scene, from a frame of your project. It needs the editor's p
 | **Alternating Slide** | Horizontal, Vertical | Horizontal: even rows (0, 2, 4) slide left and odd rows (1, 3, 5) slide right. Vertical: even columns (0, 2, 4) slide up and odd columns (1, 3, 5) slide down. |
 | **Blinds** | Horizontal, Vertical | Bars at regular intervals grow wider. |
 | **Checkerboard** | 2 x 2, 4 x 4, 8 x 8, 16 x 16 | The picture is cut into squares of the size you choose. They disappear one by one: first the squares of one color of a checkerboard, sweeping from the top left corner, then the others. |
-| **Dissolve** | Orderly, Random, WPC | Pixels disappear in a regular pattern, or at random. WPC is the dot pattern many Bally/Williams games use: one eighth of the pixels at a time, in a fixed pattern (7 frames at most; a frame limit of 7 is by design). |
+| **Dissolve** | Orderly, Random, WPC | Pixels disappear in a regular pattern, or at random. WPC is the dot pattern many Bally/Williams games use: one eighth of the pixels at a time, in a fixed pattern (always 7 frames: the number of frames is fixed, by design). |
 | **Dust** | Right, Left, Up, Down (the wind) | The picture crumbles to dust and the wind blows it away. A wave of wind starts on the side it comes from; the lit pixels fly off, faster and faster, drifting and wobbling, and some are lost on the way. One last speck stays in the last frame. |
 | **Fade** | | The picture gets darker (to black) or brighter (to white) with every frame. |
 | **Melt** | Smooth, Dripping | The picture melts down off the screen: every column slides down at its own speed. Smooth: the speeds follow a wave (the same as Wave, Vertical). Dripping: the speeds look random, in streaks, like paint dripping. |
@@ -58,7 +58,7 @@ choices you applied last.
 Every frame of a transition has to differ from the others. A slide moves whole pixels, so a
 frame 32 pixels tall can only be in so many places; blinds can only grow as wide as the gap
 between them. Each transition therefore has a most for the size of your frame, and the list in
-the window stops there. On a 128 x 32 frame, for example: Dissolve 255 (WPC 7), Split Horizontal 15. Dust and Morph find their most by trying: the frames must all differ.
+the window stops there. On a 128 x 32 frame, for example: Dissolve 255 (WPC always 7), Split Horizontal 15. Dust and Morph find their most by trying: the frames must all differ.
 Larger frames (192 x 64, 256 x 64) allow more. A fade is limited by how many brightness levels
 the picture has.
 
@@ -87,7 +87,7 @@ it starts as the duration of your frame. The scene's other settings are the edit
 starting frame started another scene before, it starts the new one now, and the plugin tells you.
 A frame of a scene has no dynamic zones, so the scene's frames have none.
 
-The field **Also in the scene** adds the **starting frame** (your frame, unchanged) as the scene's
+The field **Also include in the scene** adds the **starting frame** (your frame, unchanged) as the scene's
 first frame, and, for a transition to another frame, the **ending frame** (the other frame, as it
 is) as its last. They are there so you can give those frames their own timing in the editor's
 Scenes section. **They do not count towards the number of frames**: with 10 frames and both
